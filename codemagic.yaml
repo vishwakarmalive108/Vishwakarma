@@ -1,16 +1,23 @@
 workflows:
   android-debug:
-    name: Mannat Workforce OS Android Debug APK
+    name: Mannat Workforce OS V62
     max_build_duration: 30
     instance_type: linux_x2
+
     environment:
-      android_signing: []
+      android_signing:
+        - keystore_reference
+
     scripts:
-      - name: Set Android SDK location
-        script: echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Build debug APK
+      - name: Extract V62 source
         script: |
-          cd android
+          unzip -o mannat-v62-source.zip -d v62
+          
+      - name: Build Android debug APK
+        script: |
+          cd v62/android
+          chmod +x gradlew
           ./gradlew assembleDebug
+
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
+      - v62/android/app/build/outputs/apk/debug/*.apk
