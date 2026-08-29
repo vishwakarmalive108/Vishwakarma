@@ -13,7 +13,7 @@ workflows:
           mkdir -p v62
           unzip -o mannat-v62-source.zip -d v62
 
-            - name: Fix BiometricPrompt Activity compatibility
+      - name: Fix BiometricPrompt Activity compatibility
         script: |
           set -e
 
