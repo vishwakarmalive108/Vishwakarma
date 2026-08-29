@@ -1,9 +1,11 @@
 workflows:
   android-debug:
     name: Mannat Workforce OS V62
-    max_build_duration: 30
+    max_build_duration: 60
+    instance_type: linux_x2
 
     scripts:
+
       - name: Extract V62 source
         script: |
           rm -rf v62
@@ -12,41 +14,61 @@ workflows:
 
       - name: Find Android project
         script: |
-          echo "Searching for Gradle wrapper..."
-          find v62 -type f -name gradlew -print
+          echo "Searching for Android project..."
+          find v62 -type f \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" \) -print
 
-      - name: Build Android debug APK
+      - name: Generate Gradle wrapper and build APK
         script: |
-          GRADLEW=$(find v62 -type f -name gradlew | head -n 1)
+          set -e
 
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: gradlew not found inside V62 source"
-            echo "Files found inside source:"
-            find v62 -maxdepth 6 -type f | head -n 200
+          GRADLE_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
+
+          if [ -z "$GRADLE_FILE" ]; then
+            GRADLE_FILE=$(find v62 -type f -name "settings.gradle.kts" -print -quit)
+          fi
+
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: Android Gradle project not found."
+            find v62 -maxdepth 5 -type f | sort
             exit 1
           fi
 
-          echo "Gradle wrapper found at: $GRADLEW"
+          PROJECT_DIR=$(dirname "$GRADLE_FILE")
 
-          PROJECT_DIR=$(dirname "$GRADLEW")
-          echo "Android project directory: $PROJECT_DIR"
+          echo "Android project found at:"
+          echo "$PROJECT_DIR"
 
           cd "$PROJECT_DIR"
 
+          echo "Checking installed Gradle..."
+          gradle --version
+
+          echo "Generating Gradle wrapper..."
+          gradle wrapper
+
+          echo "Checking generated wrapper..."
+          ls -la
+          ls -la gradle/wrapper
+
           chmod +x gradlew
+
+          echo "Building Android debug APK..."
           ./gradlew assembleDebug
 
       - name: Collect APK
         script: |
-          APK=$(find v62 -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          set -e
+
+          APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Debug APK was not generated"
+            echo "ERROR: Debug APK was not generated."
             find v62 -type f -name "*.apk" -print
             exit 1
           fi
 
-          echo "APK found at: $APK"
+          echo "APK found at:"
+          echo "$APK"
 
           mkdir -p artifacts
           cp "$APK" artifacts/mannat-workforce-v62-debug.apk
