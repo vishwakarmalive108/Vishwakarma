@@ -2,20 +2,54 @@ workflows:
   android-debug:
     name: Mannat Workforce OS V62
     max_build_duration: 30
-    instance_type: mac_mini_m2
-
-    
 
     scripts:
       - name: Extract V62 source
         script: |
+          rm -rf v62
+          mkdir -p v62
           unzip -o mannat-v62-source.zip -d v62
-          
+
+      - name: Find Android project
+        script: |
+          echo "Searching for Gradle wrapper..."
+          find v62 -type f -name gradlew -print
+
       - name: Build Android debug APK
         script: |
-          cd v62/android
+          GRADLEW=$(find v62 -type f -name gradlew | head -n 1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: gradlew not found inside V62 source"
+            echo "Files found inside source:"
+            find v62 -maxdepth 6 -type f | head -n 200
+            exit 1
+          fi
+
+          echo "Gradle wrapper found at: $GRADLEW"
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+          echo "Android project directory: $PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
+
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Collect APK
+        script: |
+          APK=$(find v62 -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: Debug APK was not generated"
+            find v62 -type f -name "*.apk" -print
+            exit 1
+          fi
+
+          echo "APK found at: $APK"
+
+          mkdir -p artifacts
+          cp "$APK" artifacts/mannat-workforce-v62-debug.apk
+
     artifacts:
-      - v62/android/app/build/outputs/apk/debug/*.apk
+      - artifacts/mannat-workforce-v62-debug.apk
