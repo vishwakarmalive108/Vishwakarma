@@ -8,14 +8,58 @@ workflows:
 
       - name: Extract V62 source
         script: |
+          set -e
           rm -rf v62
           mkdir -p v62
           unzip -o mannat-v62-source.zip -d v62
 
+      - name: Fix BiometricPrompt Activity compatibility
+        script: |
+          set -e
+
+          echo "Searching for MainActivity.java..."
+
+          MAIN_ACTIVITY=$(find v62 -type f -name "MainActivity.java" -print -quit)
+
+          if [ -z "$MAIN_ACTIVITY" ]; then
+            echo "ERROR: MainActivity.java not found."
+            find v62 -type f -name "*.java" | sort
+            exit 1
+          fi
+
+          echo "MainActivity found at:"
+          echo "$MAIN_ACTIVITY"
+
+          echo "Checking current Activity inheritance..."
+          grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
+
+          # BiometricPrompt requires FragmentActivity/AppCompatActivity.
+          # Convert a normal Activity/ComponentActivity MainActivity
+          # to AppCompatActivity without changing the app's UI/functionality.
+          sed -i.bak -E \
+            's/extends (Activity|ComponentActivity)/extends AppCompatActivity/' \
+            "$MAIN_ACTIVITY"
+
+          # Add AppCompatActivity import if it is not already present.
+          if ! grep -q "import androidx.appcompat.app.AppCompatActivity;" "$MAIN_ACTIVITY"; then
+            sed -i.bak \
+              '/^package /a\
+import androidx.appcompat.app.AppCompatActivity;' \
+              "$MAIN_ACTIVITY"
+          fi
+
+          echo "MainActivity after compatibility fix:"
+          grep -n -E "AppCompatActivity|class MainActivity" "$MAIN_ACTIVITY"
+
       - name: Find Android project
         script: |
           echo "Searching for Android project..."
-          find v62 -type f \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" \) -print
+          find v62 -type f \( \
+            -name "build.gradle" -o \
+            -name "build.gradle.kts" -o \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          \) -print
 
       - name: Generate Gradle wrapper and build APK
         script: |
@@ -59,19 +103,21 @@ workflows:
         script: |
           set -e
 
-          APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
+          APK=$(find "$PROJECT_DIR" -type f \
+            -path "*/build/outputs/apk/*.apk" \
+            -print -quit)
 
           if [ -z "$APK" ]; then
             echo "ERROR: Debug APK was not generated."
-            find v62 -type f -name "*.apk" -print
+            find "$PROJECT_DIR" -type f -name "*.apk" -print
             exit 1
           fi
 
           echo "APK found at:"
           echo "$APK"
 
-          mkdir -p artifacts
-          cp "$APK" artifacts/mannat-workforce-v62-debug.apk
+          mkdir -p "$OLDPWD/artifacts"
+          cp "$APK" "$OLDPWD/artifacts/mannat-workforce-v62-debug.apk"
 
     artifacts:
       - artifacts/mannat-workforce-v62-debug.apk
