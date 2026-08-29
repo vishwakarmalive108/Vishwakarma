@@ -9,9 +9,28 @@ workflows:
       - name: Extract V62 source
         script: |
           set -e
+
+          echo "Extracting V62 source..."
+
           rm -rf v62
           mkdir -p v62
+
           unzip -o mannat-v62-source.zip -d v62
+
+          echo "Source extraction completed."
+
+      - name: Find Android project
+        script: |
+          set -e
+
+          echo "Searching for Android project..."
+
+          find v62 -type f \( \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+            -o -name "build.gradle" \
+            -o -name "build.gradle.kts" \
+          \) -print
 
       - name: Fix BiometricPrompt Activity compatibility
         script: |
@@ -23,60 +42,32 @@ workflows:
 
           if [ -z "$MAIN_ACTIVITY" ]; then
             echo "ERROR: MainActivity.java not found."
-            find v62 -type f -name "*.java" | sort
+            find v62 -type f -name "*.java" -print
             exit 1
           fi
 
           echo "MainActivity found at:"
           echo "$MAIN_ACTIVITY"
 
-          echo "Current declaration:"
+          echo "Current MainActivity declaration:"
           grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
 
-          echo "Fixing MainActivity inheritance..."
+          echo "Applying BiometricPrompt compatibility fix..."
 
-          python3 - "$MAIN_ACTIVITY" <<'PY'
-import sys
+          perl -pi -e 's/public class MainActivity extends Activity/public class MainActivity extends androidx.fragment.app.FragmentActivity/' "$MAIN_ACTIVITY"
 
-path = sys.argv[1]
+          perl -pi -e 's/public class MainActivity extends ComponentActivity/public class MainActivity extends androidx.fragment.app.FragmentActivity/' "$MAIN_ACTIVITY"
 
-with open(path, "r", encoding="utf-8") as f:
-    text = f.read()
+          echo "Updated MainActivity declaration:"
+          grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
 
-text = text.replace(
-    "public class MainActivity extends Activity",
-    "public class MainActivity extends androidx.fragment.app.FragmentActivity"
-)
-
-text = text.replace(
-    "public class MainActivity extends ComponentActivity",
-    "public class MainActivity extends androidx.fragment.app.FragmentActivity"
-)
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write(text)
-
-print("MainActivity inheritance fixed.")
-PY
-
-          echo "Updated declaration:"
-          grep -n "class MainActivity" "$MAIN_ACTIVITY"
-      - name: Find Android project
-        script: |
-          set -e
-
-          echo "Searching for Android project..."
-
-          find v62 -type f \( \
-            -name "build.gradle" -o \
-            -name "build.gradle.kts" -o \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) -print
+          echo "BiometricPrompt compatibility fix completed."
 
       - name: Generate Gradle wrapper and build APK
         script: |
           set -e
+
+          echo "Locating Android Gradle project..."
 
           GRADLE_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
 
@@ -86,7 +77,10 @@ PY
 
           if [ -z "$GRADLE_FILE" ]; then
             echo "ERROR: Android Gradle project not found."
-            find v62 -maxdepth 5 -type f | sort
+
+            echo "Files found inside V62:"
+            find v62 -maxdepth 6 -type f | sort
+
             exit 1
           fi
 
@@ -103,24 +97,32 @@ PY
           echo "Generating Gradle wrapper..."
           gradle wrapper
 
-          echo "Checking generated wrapper..."
+          echo "Checking generated Gradle wrapper..."
+
           ls -la
           ls -la gradle/wrapper
 
           chmod +x gradlew
 
           echo "Building Android debug APK..."
+
           ./gradlew assembleDebug
+
+          echo "Android debug build completed."
 
       - name: Collect APK
         script: |
           set -e
 
+          echo "Searching for generated APK..."
+
           APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
             echo "ERROR: Debug APK was not generated."
+
             find v62 -type f -name "*.apk" -print
+
             exit 1
           fi
 
@@ -128,7 +130,10 @@ PY
           echo "$APK"
 
           mkdir -p artifacts
+
           cp "$APK" artifacts/mannat-workforce-v62-debug.apk
+
+          echo "APK copied successfully."
 
     artifacts:
       - artifacts/mannat-workforce-v62-debug.apk
