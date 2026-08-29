@@ -30,30 +30,26 @@ workflows:
           echo "MainActivity found at:"
           echo "$MAIN_ACTIVITY"
 
-          echo "Checking current Activity inheritance..."
+          echo "Current MainActivity declaration:"
           grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
 
-          # BiometricPrompt requires FragmentActivity/AppCompatActivity.
-          # Convert a normal Activity/ComponentActivity MainActivity
-          # to AppCompatActivity without changing the app's UI/functionality.
-          sed -i.bak -E \
-            's/extends (Activity|ComponentActivity)/extends AppCompatActivity/' \
-            "$MAIN_ACTIVITY"
+          echo "Fixing MainActivity inheritance..."
 
-          # Add AppCompatActivity import if it is not already present.
-          if ! grep -q "import androidx.appcompat.app.AppCompatActivity;" "$MAIN_ACTIVITY"; then
-            sed -i.bak \
-              '/^package /a\
-import androidx.appcompat.app.AppCompatActivity;' \
-              "$MAIN_ACTIVITY"
+          sed -i.bak -E 's/extends (Activity|ComponentActivity)/extends AppCompatActivity/' "$MAIN_ACTIVITY"
+
+          if ! grep -q 'import androidx.appcompat.app.AppCompatActivity;' "$MAIN_ACTIVITY"; then
+            sed -i.bak '/^package /a import androidx.appcompat.app.AppCompatActivity;' "$MAIN_ACTIVITY"
           fi
 
-          echo "MainActivity after compatibility fix:"
-          grep -n -E "AppCompatActivity|class MainActivity" "$MAIN_ACTIVITY"
+          echo "Updated MainActivity:"
+          grep -n -E 'AppCompatActivity|class MainActivity' "$MAIN_ACTIVITY"
 
       - name: Find Android project
         script: |
+          set -e
+
           echo "Searching for Android project..."
+
           find v62 -type f \( \
             -name "build.gradle" -o \
             -name "build.gradle.kts" -o \
@@ -103,21 +99,19 @@ import androidx.appcompat.app.AppCompatActivity;' \
         script: |
           set -e
 
-          APK=$(find "$PROJECT_DIR" -type f \
-            -path "*/build/outputs/apk/*.apk" \
-            -print -quit)
+          APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
             echo "ERROR: Debug APK was not generated."
-            find "$PROJECT_DIR" -type f -name "*.apk" -print
+            find v62 -type f -name "*.apk" -print
             exit 1
           fi
 
           echo "APK found at:"
           echo "$APK"
 
-          mkdir -p "$OLDPWD/artifacts"
-          cp "$APK" "$OLDPWD/artifacts/mannat-workforce-v62-debug.apk"
+          mkdir -p artifacts
+          cp "$APK" artifacts/mannat-workforce-v62-debug.apk
 
     artifacts:
       - artifacts/mannat-workforce-v62-debug.apk
