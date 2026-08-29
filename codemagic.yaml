@@ -13,7 +13,7 @@ workflows:
           mkdir -p v62
           unzip -o mannat-v62-source.zip -d v62
 
-      - name: Fix BiometricPrompt Activity compatibility
+            - name: Fix BiometricPrompt Activity compatibility
         script: |
           set -e
 
@@ -30,20 +30,37 @@ workflows:
           echo "MainActivity found at:"
           echo "$MAIN_ACTIVITY"
 
-          echo "Current MainActivity declaration:"
+          echo "Current declaration:"
           grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
 
           echo "Fixing MainActivity inheritance..."
 
-          sed -i.bak -E 's/extends (Activity|ComponentActivity)/extends AppCompatActivity/' "$MAIN_ACTIVITY"
+          python3 - "$MAIN_ACTIVITY" <<'PY'
+import sys
 
-          if ! grep -q 'import androidx.appcompat.app.AppCompatActivity;' "$MAIN_ACTIVITY"; then
-            sed -i.bak '/^package /a import androidx.appcompat.app.AppCompatActivity;' "$MAIN_ACTIVITY"
-          fi
+path = sys.argv[1]
 
-          echo "Updated MainActivity:"
-          grep -n -E 'AppCompatActivity|class MainActivity' "$MAIN_ACTIVITY"
+with open(path, "r", encoding="utf-8") as f:
+    text = f.read()
 
+text = text.replace(
+    "public class MainActivity extends Activity",
+    "public class MainActivity extends androidx.fragment.app.FragmentActivity"
+)
+
+text = text.replace(
+    "public class MainActivity extends ComponentActivity",
+    "public class MainActivity extends androidx.fragment.app.FragmentActivity"
+)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(text)
+
+print("MainActivity inheritance fixed.")
+PY
+
+          echo "Updated declaration:"
+          grep -n "class MainActivity" "$MAIN_ACTIVITY"
       - name: Find Android project
         script: |
           set -e
