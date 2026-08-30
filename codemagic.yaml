@@ -1,293 +1,34 @@
 workflows:
-  android-debug:
-    name: Mannat Workforce OS V62
+  vishwakarmaa-pilot-v2:
+    name: Vishwakarmaa Factory Attendance Pilot V2
     max_build_duration: 60
     instance_type: mac_mini_m2
-
+    environment:
+      java: 17
     scripts:
-
-      - name: Extract V62 source
+      - name: Extract fixed Android source
         script: |
           set -e
-
-          echo "========================================"
-          echo "EXTRACTING V62 SOURCE"
-          echo "========================================"
-
-          rm -rf v62
-          mkdir -p v62
-
-          unzip -o mannat-v62-source.zip -d v62
-
-          echo "Source extraction completed."
-
-      - name: Find Android project
+          rm -rf build-source
+          mkdir -p build-source
+          unzip -q vishwakarmaa-v2-source.zip -d build-source
+          test -f build-source/android/settings.gradle
+          test -f build-source/android/app/build.gradle
+      - name: Configure Android SDK
         script: |
-          set -e
-
-          echo "========================================"
-          echo "SEARCHING FOR ANDROID PROJECT"
-          echo "========================================"
-
-          SETTINGS_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE=$(find v62 -type f -name "settings.gradle.kts" -print -quit)
-          fi
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android Gradle project not found."
-            find v62 -maxdepth 7 -type f | sort
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-
-          echo "Android project:"
-          echo "$PROJECT_DIR"
-
-          echo "Gradle files:"
-          find "$PROJECT_DIR" -maxdepth 3 -type f \( \
-            -name "build.gradle" \
-            -o -name "build.gradle.kts" \
-            -o -name "settings.gradle" \
-            -o -name "settings.gradle.kts" \
-          \) -print
-
-      - name: Fix BiometricPrompt Activity compatibility
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/build-source/android/local.properties"
+      - name: Prepare Gradle wrapper
         script: |
-          set -e
-
-          echo "========================================"
-          echo "FIXING BIOMETRICPROMPT COMPATIBILITY"
-          echo "========================================"
-
-          MAIN_ACTIVITY=$(find v62 -type f -name "MainActivity.java" -print -quit)
-
-          if [ -z "$MAIN_ACTIVITY" ]; then
-            echo "ERROR: MainActivity.java not found."
-            find v62 -type f -name "*.java" -print
-            exit 1
-          fi
-
-          echo "MainActivity found:"
-          echo "$MAIN_ACTIVITY"
-
-          echo "Before fix:"
-          grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
-
-          perl -pi -e 's/public class MainActivity extends Activity/public class MainActivity extends androidx.fragment.app.FragmentActivity/' "$MAIN_ACTIVITY"
-
-          perl -pi -e 's/public class MainActivity extends ComponentActivity/public class MainActivity extends androidx.fragment.app.FragmentActivity/' "$MAIN_ACTIVITY"
-
-          echo "After fix:"
-          grep -n "class MainActivity" "$MAIN_ACTIVITY" || true
-
-          echo "BiometricPrompt compatibility fix completed."
-
-      - name: Prepare WebView HTML assets
+          cd "$CM_BUILD_DIR/build-source/android"
+          gradle wrapper --gradle-version 8.7 --distribution-type bin
+      - name: Build debug APK
         script: |
-          set -e
-
-          echo "========================================"
-          echo "PREPARING WEBVIEW ASSETS"
-          echo "========================================"
-
-          SETTINGS_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE=$(find v62 -type f -name "settings.gradle.kts" -print -quit)
-          fi
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android project not found."
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-
-          ASSETS_DIR="$PROJECT_DIR/app/src/main/assets"
-
-          echo "Android project:"
-          echo "$PROJECT_DIR"
-
-          echo "Target assets directory:"
-          echo "$ASSETS_DIR"
-
-          mkdir -p "$ASSETS_DIR"
-
-          echo "Searching for mobile-attendance.html..."
-
-          MOBILE_ATTENDANCE=$(find v62 -type f -name "mobile-attendance.html" -print -quit)
-
-          if [ -z "$MOBILE_ATTENDANCE" ]; then
-            echo "ERROR: mobile-attendance.html was not found anywhere in V62 source."
-
-            echo "All HTML files found:"
-            find v62 -type f -name "*.html" -print | sort
-
-            exit 1
-          fi
-
-          echo "mobile-attendance.html found at:"
-          echo "$MOBILE_ATTENDANCE"
-
-          WEB_ROOT=$(dirname "$MOBILE_ATTENDANCE")
-
-          echo "Detected WebView asset root:"
-          echo "$WEB_ROOT"
-
-          echo "HTML files in detected root:"
-          find "$WEB_ROOT" -type f -name "*.html" -print | sort
-
-          echo "Copying WebView files into Android assets..."
-
-          cp -R "$WEB_ROOT"/. "$ASSETS_DIR"/
-
-          echo "Checking copied HTML files..."
-
-          find "$ASSETS_DIR" -type f -name "*.html" -print | sort
-
-          echo "Checking required mobile-attendance.html..."
-
-          if [ ! -f "$ASSETS_DIR/mobile-attendance.html" ]; then
-            echo "ERROR: mobile-attendance.html was not copied to Android assets root."
-
-            echo "Searching inside assets:"
-            find "$ASSETS_DIR" -type f -name "mobile-attendance.html" -print
-
-            exit 1
-          fi
-
-          echo "SUCCESS:"
-          echo "$ASSETS_DIR/mobile-attendance.html"
-
-      - name: Verify WebView asset references
+          cd "$CM_BUILD_DIR/build-source/android"
+          chmod +x ./gradlew
+          ./gradlew clean assembleDebug
+      - name: Verify APK
         script: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING WEBVIEW ASSETS"
-          echo "========================================"
-
-          SETTINGS_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE=$(find v62 -type f -name "settings.gradle.kts" -print -quit)
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-          ASSETS_DIR="$PROJECT_DIR/app/src/main/assets"
-
-          echo "Total HTML files:"
-          find "$ASSETS_DIR" -type f -name "*.html" | wc -l
-
-          echo "Total CSS files:"
-          find "$ASSETS_DIR" -type f -name "*.css" | wc -l
-
-          echo "Total JavaScript files:"
-          find "$ASSETS_DIR" -type f -name "*.js" | wc -l
-
-          echo "Mobile Attendance:"
-          ls -lh "$ASSETS_DIR/mobile-attendance.html"
-
-          echo "WebView asset preparation verified."
-
-      - name: Generate Gradle wrapper and build APK
-        script: |
-          set -e
-
-          echo "========================================"
-          echo "BUILDING ANDROID APK"
-          echo "========================================"
-
-          SETTINGS_FILE=$(find v62 -type f -name "settings.gradle" -print -quit)
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE=$(find v62 -type f -name "settings.gradle.kts" -print -quit)
-          fi
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android Gradle project not found."
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-
-          echo "Android project:"
-          echo "$PROJECT_DIR"
-
-          cd "$PROJECT_DIR"
-
-          echo "Checking installed Gradle..."
-          gradle --version
-
-          echo "Generating Gradle wrapper..."
-          gradle wrapper
-
-          chmod +x gradlew
-
-          echo "Building debug APK..."
-
-          ./gradlew assembleDebug
-
-          echo "Gradle build completed successfully."
-
-      - name: Verify APK contents
-        script: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING APK CONTENTS"
-          echo "========================================"
-
-          APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            find v62 -type f -name "*.apk" -print
-            exit 1
-          fi
-
-          echo "APK found:"
-          echo "$APK"
-
-          echo "Checking for mobile-attendance.html inside APK..."
-
-          if unzip -l "$APK" | grep -q "assets/mobile-attendance.html"; then
-            echo "SUCCESS: mobile-attendance.html is inside the APK."
-          else
-            echo "ERROR: mobile-attendance.html is NOT inside the APK."
-
-            echo "HTML files inside APK:"
-            unzip -l "$APK" | grep -E "assets/.*\.html" || true
-
-            exit 1
-          fi
-
-          echo "APK asset verification completed."
-
-      - name: Collect APK
-        script: |
-          set -e
-
-          echo "========================================"
-          echo "COLLECTING APK"
-          echo "========================================"
-
-          APK=$(find v62 -type f -path "*/build/outputs/apk/*.apk" -print -quit)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-
-          mkdir -p artifacts
-
-          cp "$APK" artifacts/mannat-workforce-v62-debug.apk
-
-          echo "Final APK:"
-          ls -lh artifacts/mannat-workforce-v62-debug.apk
-
+          test -f "$CM_BUILD_DIR/build-source/android/app/build/outputs/apk/debug/app-debug.apk"
+          echo "SUCCESS: Vishwakarmaa Pilot V2 APK created."
     artifacts:
-      - artifacts/mannat-workforce-v62-debug.apk
+      - build-source/android/app/build/outputs/apk/debug/*.apk
